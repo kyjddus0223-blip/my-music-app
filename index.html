@@ -4,8 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 태그 & 반복 에디터</title>
+    <!-- ID3 태그 읽기 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <!-- ID3 태그 쓰기 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
+    <!-- M4A -> MP3 변환 인코더 라이브러리 -->
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
     <style>
         body {
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -166,9 +170,9 @@
         <h2>🎵 MP3 태그 & 반복 에디터</h2>
 
         <label class="file-label" for="audio-file">
-            📂 MP3 파일 선택하기
+            📂 음악 파일 선택하기 (MP3, M4A)
         </label>
-        <input type="file" id="audio-file" accept="audio/mp3, audio/mpeg">
+        <input type="file" id="audio-file" accept="audio/*">
 
         <div class="cover-box">
             <span class="cover-placeholder" id="placeholder">🎵</span>
@@ -251,7 +255,6 @@
             }
         });
 
-        // 가짜 MP3(M4A/MP4) 식별 함수
         function isMp4(buffer) {
             const bytes = new Uint8Array(buffer);
             if (bytes.length > 8) {
@@ -342,13 +345,11 @@
             }
         }
 
-        // 음원 앞뒤의 불순물(기존 태그)을 완벽하게 제거하여 순수 MP3 데이터만 추출
         function extractPureAudio(buffer) {
             let bytes = new Uint8Array(buffer);
             let start = 0;
             let end = bytes.length;
 
-            // 1. 맨 앞부분 ID3v2 태그 제거
             if (bytes.length > 10 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
                 const flags = bytes[5];
                 const hasFooter = (flags & 0x10) !== 0;
@@ -356,14 +357,12 @@
                 start = 10 + size + (hasFooter ? 10 : 0);
             }
 
-            // 2. 맨 뒷부분 ID3v1 태그 제거 (정확히 128바이트)
             if (end - start > 128) {
                 if (bytes[end - 128] === 0x54 && bytes[end - 127] === 0x41 && bytes[end - 126] === 0x47) {
                     end -= 128;
                 }
             }
 
-            // 3. 맨 뒷부분 APEv2 태그 제거 (32바이트)
             if (end - start > 32) {
                 if (bytes[end - 32] === 0x41 && bytes[end - 31] === 0x50 && bytes[end - 30] === 0x45 && bytes[end - 29] === 0x54) {
                     end -= 32;
@@ -373,38 +372,83 @@
             return buffer.slice(start, end);
         }
 
-        function repeatArrayBuffer(buffer, count) {
-            const pureAudioBuffer = extractPureAudio(buffer);
-            if (count <= 1) return pureAudioBuffer;
-            
-            const sourceArray = new Uint8Array(pureAudioBuffer);
-            const resultArray = new Uint8Array(pureAudioBuffer.byteLength * count);
-            for (let i = 0; i < count; i++) {
-                resultArray.set(sourceArray, i * pureAudioBuffer.byteLength);
+        // M4A/AAC AudioBuffer를 MP3 ArrayBuffer로 실시간 인코딩하는 함수
+        function audioBufferToMp3(audioBuffer) {
+            const channels = audioBuffer.numberOfChannels;
+            const sampleRate = audioBuffer.sampleRate;
+            const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
+            const mp3Data = [];
+
+            const left = audioBuffer.getChannelData(0);
+            const right = channels > 1 ? audioBuffer.getChannelData(1) : left;
+
+            const sampleBlockSize = 1152;
+            const leftChunk = new Int16Array(sampleBlockSize);
+            const rightChunk = new Int16Array(sampleBlockSize);
+
+            for (let i = 0; i < left.length; i += sampleBlockSize) {
+                const subLen = Math.min(sampleBlockSize, left.length - i);
+                for (let j = 0; j < subLen; j++) {
+                    let sL = Math.max(-1, Math.min(1, left[i + j]));
+                    leftChunk[j] = sL < 0 ? sL * 0x8000 : sL * 0x7FFF;
+
+                    let sR = Math.max(-1, Math.min(1, right[i + j]));
+                    rightChunk[j] = sR < 0 ? sR * 0x8000 : sR * 0x7FFF;
+                }
+                
+                let mp3buf;
+                if (channels === 1) {
+                    mp3buf = mp3encoder.encodeBuffer(leftChunk.subarray(0, subLen));
+                } else {
+                    mp3buf = mp3encoder.encodeBuffer(leftChunk.subarray(0, subLen), rightChunk.subarray(0, subLen));
+                }
+                if (mp3buf.length > 0) mp3Data.push(mp3buf);
             }
-            return resultArray.buffer;
+            const mp3buf = mp3encoder.flush();
+            if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+            let totalLen = 0;
+            for (let i = 0; i < mp3Data.length; i++) {
+                totalLen += mp3Data[i].length;
+            }
+            const merged = new Uint8Array(totalLen);
+            let offset = 0;
+            for (let i = 0; i < mp3Data.length; i++) {
+                merged.set(mp3Data[i], offset);
+                offset += mp3Data[i].length;
+            }
+            return merged.buffer;
         }
 
-        downloadBtn.addEventListener('click', () => {
+        downloadBtn.addEventListener('click', async () => {
             if (!rawFileBuffer) {
-                alert("MP3 파일을 먼저 선택해 주세요!");
-                return;
-            }
-
-            // 유튜브 음원 추출기에서 흔히 발생하는 가짜 MP3(m4a) 방어
-            if (isMp4(rawFileBuffer)) {
-                alert("⚠️ 오류: 이 파일은 이름만 .mp3이고 실제로는 m4a(mp4) 형식입니다.\n\n유튜브 음원 추출 사이트에서 받은 파일에서 흔히 발생합니다. 이 파일은 구조가 달라서 반복 연결이 불가능합니다.\n진짜 mp3 파일로 변환하신 후 다시 시도해 주세요.");
-                statusMsg.innerText = "형식이 맞지 않는 가짜 MP3 파일입니다.";
+                alert("음악 파일을 먼저 선택해 주세요!");
                 return;
             }
 
             try {
                 const repeatCount = parseInt(repeatCountSelect.value, 10);
+                let baseAudioBuffer;
+
+                if (isMp4(rawFileBuffer)) {
+                    statusMsg.innerText = "⏳ M4A 파일 감지: MP3로 변환 및 인코딩 중입니다...";
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const decodedBuffer = await audioCtx.decodeAudioData(rawFileBuffer.slice(0));
+                    baseAudioBuffer = audioBufferToMp3(decodedBuffer);
+                } else {
+                    baseAudioBuffer = extractPureAudio(rawFileBuffer);
+                }
+
                 statusMsg.innerText = `${repeatCount}회 반복 음원 생성 및 태그 처리 중...`;
 
                 setTimeout(() => {
-                    const finalAudioBuffer = repeatArrayBuffer(rawFileBuffer, repeatCount);
-                    const writer = new ID3Writer(finalAudioBuffer);
+                    const sourceArray = new Uint8Array(baseAudioBuffer);
+                    const finalArray = new Uint8Array(baseAudioBuffer.byteLength * repeatCount);
+                    for (let i = 0; i < repeatCount; i++) {
+                        finalArray.set(sourceArray, i * baseAudioBuffer.byteLength);
+                    }
+
+                    const writer = new ID3Writer(finalArray.buffer);
 
                     if (titleInput.value.trim()) writer.setFrame('TIT2', titleInput.value.trim());
                     if (artistInput.value.trim()) writer.setFrame('TPE1', [artistInput.value.trim()]);
@@ -424,19 +468,17 @@
                     const downloadUrl = writer.getURL();
                     const a = document.createElement('a');
                     a.href = downloadUrl;
-                    
-                    // 태그 없이 곡 제목만 깔끔하게 나오도록 유지
                     a.download = `${titleInput.value.trim() || 'music'}.mp3`;
                     
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
 
-                    statusMsg.innerText = "🎉 다운로드가 완료되었습니다!";
+                    statusMsg.innerText = "🎉 MP3 변환 및 다운로드가 완료되었습니다!";
                 }, 100);
             } catch (err) {
                 console.error(err);
-                alert("처리 과정에서 오류가 발생했습니다.");
+                alert("음원 처리 과정에서 오류가 발생했습니다.");
                 statusMsg.innerText = "다운로드 실패";
             }
         });
