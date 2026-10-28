@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MP3 태그 & 커버 에디터</title>
+    <title>MP3 태그 & 반복 에디터</title>
     <!-- ID3 태그 입히기 라이브러리 (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
     <style>
@@ -80,7 +80,7 @@
             display: block;
             margin-bottom: 4px;
         }
-        .input-group input {
+        .input-group input, .input-group select {
             width: 100%;
             padding: 10px;
             border-radius: 8px;
@@ -90,6 +90,29 @@
             outline: none;
             box-sizing: border-box;
             font-size: 0.9em;
+        }
+        .option-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #2a2a2a;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .toggle-btn {
+            background-color: #444;
+            color: #fff;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .toggle-btn.active {
+            background-color: #1db954;
+            color: #000;
         }
         .btn-group {
             display: flex;
@@ -140,7 +163,7 @@
 <body>
 
     <div class="player-card">
-        <h2>🎵 MP3 태그 에디터</h2>
+        <h2>🎵 MP3 태그 & 반복 에디터</h2>
 
         <!-- 파일 선택 버튼 -->
         <label class="file-label" for="audio-file">
@@ -167,9 +190,31 @@
             <label>작곡가 / 프로듀서 (Composer)</label>
             <input type="text" id="composer-input" placeholder="작곡가 이름 입력">
         </div>
+
+        <!-- 반복 설정 옵션 -->
+        <div class="option-row">
+            <span>🔁 무한 반복 재생 (웹용)</span>
+            <button class="toggle-btn" id="loop-toggle-btn">OFF</button>
+        </div>
+
         <div class="input-group">
-            <label>앨범명 (Album)</label>
-            <input type="text" id="album-input" placeholder="앨범명 입력">
+            <label>🔁 음원 반복해서 저장하기</label>
+            <select id="repeat-count-select">
+                <option value="1">1회 (원본 길이)</option>
+                <option value="2">2회 반복 연결</option>
+                <option value="3">3회 반복 연결</option>
+                <option value="4">4회 반복 연결</option>
+                <option value="5">5회 반복 연결</option>
+                <option value="6">6회 반복 연결</option>
+                <option value="7">7회 반복 연결</option>
+                <option value="8">8회 반복 연결</option>
+                <option value="9">9회 반복 연결</option>
+                <option value="10">10회 반복 연결</option>
+                <option value="12">12회 반복 연결</option>
+                <option value="15">15회 반복 연결</option>
+                <option value="18">18회 반복 연결</option>
+                <option value="20">20회 반복 연결 (최대)</option>
+            </select>
         </div>
 
         <!-- 버튼 영역 -->
@@ -194,36 +239,43 @@
         const titleInput = document.getElementById('title-input');
         const artistInput = document.getElementById('artist-input');
         const composerInput = document.getElementById('composer-input');
-        const albumInput = document.getElementById('album-input');
         const coverImg = document.getElementById('cover-img');
         const placeholder = document.getElementById('placeholder');
         const searchBtn = document.getElementById('search-btn');
         const downloadBtn = document.getElementById('download-btn');
         const statusMsg = document.getElementById('status-msg');
+        const loopToggleBtn = document.getElementById('loop-toggle-btn');
+        const repeatCountSelect = document.getElementById('repeat-count-select');
 
-        // 1. 파일 올렸을 때 이벤트
+        // 웹 플레이어 무한 반복 재생 토글
+        loopToggleBtn.addEventListener('click', () => {
+            audioPlayer.loop = !audioPlayer.loop;
+            if (audioPlayer.loop) {
+                loopToggleBtn.innerText = 'ON';
+                loopToggleBtn.classList.add('active');
+            } else {
+                loopToggleBtn.innerText = 'OFF';
+                loopToggleBtn.classList.remove('active');
+            }
+        });
+
+        // 파일 올렸을 때
         fileInput.addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
             statusMsg.innerText = "파일을 불러오는 중...";
-            
-            // 재생용 URL 연결
             audioPlayer.src = URL.createObjectURL(file);
-            
-            // 파일 원본 바이너리(ArrayBuffer) 읽기
             rawFileBuffer = await file.arrayBuffer();
 
-            // 파일명에서 기본 곡 제목 추출
             const fileName = file.name.replace(/\.[^/.]+$/, "");
             titleInput.value = fileName;
 
-            // 검색 실행
             fetchMetadata(fileName);
             downloadBtn.disabled = false;
         });
 
-        // 2. iTunes API 정보 자동 검색
+        // iTunes API 정보 자동 검색
         searchBtn.addEventListener('click', () => {
             const query = titleInput.value.trim();
             if (query) fetchMetadata(query);
@@ -237,20 +289,16 @@
 
                 if (data.results && data.results.length > 0) {
                     const info = data.results[0];
-
                     titleInput.value = info.trackName || '';
                     artistInput.value = info.artistName || '';
-                    composerInput.value = info.artistName || ''; // 기본값으로 아티스트명 설정
-                    albumInput.value = info.collectionName || '';
+                    composerInput.value = info.artistName || '';
 
-                    // 고화질 커버 이미지 URL (600x600)
                     if (info.artworkUrl100) {
                         const highResUrl = info.artworkUrl100.replace('100x100bb', '600x600bb');
                         coverImg.src = highResUrl;
                         coverImg.style.display = 'block';
                         placeholder.style.display = 'none';
 
-                        // 이미지 다운로드 후 ArrayBuffer로 변환
                         const imgRes = await fetch(highResUrl);
                         coverBuffer = await imgRes.arrayBuffer();
                         coverMimeType = imgRes.headers.get('content-type') || 'image/jpeg';
@@ -265,51 +313,64 @@
             }
         }
 
-        // 3. ID3 태그 입혀서 새 MP3 파일 다운로드
+        // 반복 바이너리 생성 함수
+        function repeatArrayBuffer(buffer, count) {
+            if (count <= 1) return buffer;
+            const sourceArray = new Uint8Array(buffer);
+            const resultArray = new Uint8Array(buffer.byteLength * count);
+            for (let i = 0; i < count; i++) {
+                resultArray.set(sourceArray, i * buffer.byteLength);
+            }
+            return resultArray.buffer;
+        }
+
+        // ID3 태그 및 반복 적용 다운로드
         downloadBtn.addEventListener('click', () => {
             if (!rawFileBuffer) {
-                alert("MP3 파일을먼저 선택해 주세요!");
+                alert("MP3 파일을 먼저 선택해 주세요!");
                 return;
             }
 
             try {
-                statusMsg.innerText = "태그를 입히는 중...";
-                const writer = new ID3Writer(rawFileBuffer);
+                const repeatCount = parseInt(repeatCountSelect.value, 10);
+                statusMsg.innerText = `${repeatCount}회 반복 음원 생성 및 태그 처리 중...`;
 
-                // 텍스트 태그 설정
-                if (titleInput.value.trim()) writer.setFrame('TIT2', titleInput.value.trim());
-                if (artistInput.value.trim()) writer.setFrame('TPE1', [artistInput.value.trim()]);
-                if (composerInput.value.trim()) writer.setFrame('TCOM', [composerInput.value.trim()]);
-                if (albumInput.value.trim()) writer.setFrame('TALB', albumInput.value.trim());
+                setTimeout(() => {
+                    const finalAudioBuffer = repeatArrayBuffer(rawFileBuffer, repeatCount);
+                    const writer = new ID3Writer(finalAudioBuffer);
 
-                // 앨범 커버 이미지 태그(APIC) 설정
-                if (coverBuffer) {
-                    writer.setFrame('APIC', {
-                        type: 3, // Cover (front)
-                        data: coverBuffer,
-                        description: 'Cover',
-                        mime: coverMimeType
-                    });
-                }
+                    if (titleInput.value.trim()) writer.setFrame('TIT2', titleInput.value.trim());
+                    if (artistInput.value.trim()) writer.setFrame('TPE1', [artistInput.value.trim()]);
+                    if (composerInput.value.trim()) writer.setFrame('TCOM', [composerInput.value.trim()]);
 
-                writer.addTag();
+                    if (coverBuffer) {
+                        writer.setFrame('APIC', {
+                            type: 3,
+                            data: coverBuffer,
+                            description: 'Cover',
+                            mime: coverMimeType
+                        });
+                    }
 
-                // 새로 만들어진 파일 다운로드 실행
-                const blob = writer.getBlob();
-                const downloadUrl = writer.getURL();
-                
-                const a = document.createElement('a');
-                a.href = downloadUrl;
-                a.download = `[태그수정] ${titleInput.value.trim() || 'music'}.mp3`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                    writer.addTag();
 
-                statusMsg.innerText = "🎉 다운로드가 완료되었습니다!";
+                    const downloadUrl = writer.getURL();
+                    const a = document.createElement('a');
+                    a.href = downloadUrl;
+                    
+                    const repeatTag = repeatCount > 1 ? `_${repeatCount}회반복` : '';
+                    a.download = `[태그수정${repeatTag}] ${titleInput.value.trim() || 'music'}.mp3`;
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    statusMsg.innerText = "🎉 다운로드가 완료되었습니다!";
+                }, 100);
             } catch (err) {
                 console.error(err);
-                alert("태그를 입히는 과정에서 오류가 발생했습니다.");
-                statusMsg.innerText = "태그 합성 실패";
+                alert("처리 과정에서 오류가 발생했습니다.");
+                statusMsg.innerText = "다운로드 실패";
             }
         });
     </script>
