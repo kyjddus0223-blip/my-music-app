@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 태그 & 반복 에디터</title>
-    <!-- 기존 ID3 태그 읽기 라이브러리 (CDN) -->
+    <!-- ID3 태그 읽기 라이브러리 (CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <!-- ID3 태그 쓰기 라이브러리 (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
@@ -270,7 +270,6 @@
             audioPlayer.src = URL.createObjectURL(file);
             rawFileBuffer = await file.arrayBuffer();
 
-            // 기본값 설정
             const fileName = file.name.replace(/\.[^/.]+$/, "");
             titleInput.value = fileName;
             artistInput.value = '';
@@ -279,7 +278,6 @@
             coverImg.style.display = 'none';
             placeholder.style.display = 'block';
 
-            // 1. 기존 MP3 파일 내부 태그(커버 사진 포함) 추출
             window.jsmediatags.read(file, {
                 onSuccess: function(tag) {
                     const tags = tag.tags;
@@ -288,7 +286,6 @@
                     if (tags.artist) artistInput.value = tags.artist;
                     if (tags.composer) composerInput.value = tags.composer;
 
-                    // 기존 커버 사진 추출
                     if (tags.picture) {
                         const { data, format } = tags.picture;
                         const byteArray = new Uint8Array(data);
@@ -314,7 +311,7 @@
             downloadBtn.disabled = false;
         });
 
-        // iTunes API 정보 자동 검색 (필요 시에만 실행)
+        // iTunes API 정보 자동 검색
         searchBtn.addEventListener('click', () => {
             const query = titleInput.value.trim();
             if (query) fetchMetadata(query);
@@ -352,13 +349,31 @@
             }
         }
 
-        // 반복 바이너리 생성 함수
+        // 기존 ID3v2 태그 헤더를 제거하는 함수 (순수 MP3 프레임만 분리)
+        function stripID3v2(buffer) {
+            const bytes = new Uint8Array(buffer);
+            if (bytes.length > 10 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) { // 'ID3'
+                const size = ((bytes[6] & 0x7F) << 21) | 
+                             ((bytes[7] & 0x7F) << 14) | 
+                             ((bytes[8] & 0x7F) << 7) | 
+                             (bytes[9] & 0x7F);
+                const headerSize = 10 + size;
+                if (headerSize < bytes.length) {
+                    return buffer.slice(headerSize);
+                }
+            }
+            return buffer;
+        }
+
+        // 순수 오디오 반복 바이너리 생성 함수
         function repeatArrayBuffer(buffer, count) {
-            if (count <= 1) return buffer;
-            const sourceArray = new Uint8Array(buffer);
-            const resultArray = new Uint8Array(buffer.byteLength * count);
+            const pureAudioBuffer = stripID3v2(buffer);
+            if (count <= 1) return pureAudioBuffer;
+            
+            const sourceArray = new Uint8Array(pureAudioBuffer);
+            const resultArray = new Uint8Array(pureAudioBuffer.byteLength * count);
             for (let i = 0; i < count; i++) {
-                resultArray.set(sourceArray, i * buffer.byteLength);
+                resultArray.set(sourceArray, i * pureAudioBuffer.byteLength);
             }
             return resultArray.buffer;
         }
@@ -375,7 +390,10 @@
                 statusMsg.innerText = `${repeatCount}회 반복 음원 생성 및 태그 처리 중...`;
 
                 setTimeout(() => {
+                    // 1. 깨짐 없이 순수 음원 부분만 잘라내어 반복 연결
                     const finalAudioBuffer = repeatArrayBuffer(rawFileBuffer, repeatCount);
+                    
+                    // 2. 단일 통합 ID3 태그 병합
                     const writer = new ID3Writer(finalAudioBuffer);
 
                     if (titleInput.value.trim()) writer.setFrame('TIT2', titleInput.value.trim());
