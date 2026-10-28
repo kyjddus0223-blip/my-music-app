@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 태그 & 반복 에디터</title>
-    <!-- ID3 태그 입히기 라이브러리 (CDN) -->
+    <!-- 기존 ID3 태그 읽기 라이브러리 (CDN) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <!-- ID3 태그 쓰기 라이브러리 (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
     <style>
         body {
@@ -264,25 +266,62 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            statusMsg.innerText = "파일을 불러오는 중...";
+            statusMsg.innerText = "파일에서 커버 및 태그 추출 중...";
             audioPlayer.src = URL.createObjectURL(file);
             rawFileBuffer = await file.arrayBuffer();
 
+            // 기본값 설정
             const fileName = file.name.replace(/\.[^/.]+$/, "");
             titleInput.value = fileName;
+            artistInput.value = '';
+            composerInput.value = '';
+            coverBuffer = null;
+            coverImg.style.display = 'none';
+            placeholder.style.display = 'block';
 
-            fetchMetadata(fileName);
+            // 1. 기존 MP3 파일 내부 태그(커버 사진 포함) 추출
+            window.jsmediatags.read(file, {
+                onSuccess: function(tag) {
+                    const tags = tag.tags;
+                    
+                    if (tags.title) titleInput.value = tags.title;
+                    if (tags.artist) artistInput.value = tags.artist;
+                    if (tags.composer) composerInput.value = tags.composer;
+
+                    // 기존 커버 사진 추출
+                    if (tags.picture) {
+                        const { data, format } = tags.picture;
+                        const byteArray = new Uint8Array(data);
+                        coverBuffer = byteArray.buffer;
+                        coverMimeType = format || 'image/jpeg';
+
+                        const blob = new Blob([byteArray], { type: coverMimeType });
+                        coverImg.src = URL.createObjectURL(blob);
+                        coverImg.style.display = 'block';
+                        placeholder.style.display = 'none';
+                        
+                        statusMsg.innerText = "✅ 기존 커버 및 태그 정보를 불러왔습니다!";
+                    } else {
+                        statusMsg.innerText = "기존 커버가 없어 검색 버튼으로 찾으실 수 있습니다.";
+                    }
+                },
+                onError: function(error) {
+                    console.log('태그 읽기 오류:', error);
+                    statusMsg.innerText = "파일을 불러왔습니다.";
+                }
+            });
+
             downloadBtn.disabled = false;
         });
 
-        // iTunes API 정보 자동 검색
+        // iTunes API 정보 자동 검색 (필요 시에만 실행)
         searchBtn.addEventListener('click', () => {
             const query = titleInput.value.trim();
             if (query) fetchMetadata(query);
         });
 
         async function fetchMetadata(query) {
-            statusMsg.innerText = "음악 정보를 검색 중입니다...";
+            statusMsg.innerText = "음악 정보를 온라인 검색 중입니다...";
             try {
                 const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
                 const data = await res.json();
@@ -303,9 +342,9 @@
                         coverBuffer = await imgRes.arrayBuffer();
                         coverMimeType = imgRes.headers.get('content-type') || 'image/jpeg';
                     }
-                    statusMsg.innerText = "✅ 음악 정보 및 커버를 가져왔습니다!";
+                    statusMsg.innerText = "✅ 온라인 음악 정보 및 새 커버를 가져왔습니다!";
                 } else {
-                    statusMsg.innerText = "검색 결과를 찾지 못했습니다. 직접 입력해 주세요.";
+                    statusMsg.innerText = "검색 결과를 찾지 못했습니다. 기존 커버가 유지됩니다.";
                 }
             } catch (err) {
                 console.error(err);
