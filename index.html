@@ -390,10 +390,7 @@
                 statusMsg.innerText = `${repeatCount}회 반복 음원 생성 및 태그 처리 중...`;
 
                 setTimeout(() => {
-                    // 1. 깨짐 없이 순수 음원 부분만 잘라내어 반복 연결
                     const finalAudioBuffer = repeatArrayBuffer(rawFileBuffer, repeatCount);
-                    
-                    // 2. 단일 통합 ID3 태그 병합
                     const writer = new ID3Writer(finalAudioBuffer);
 
                     if (titleInput.value.trim()) writer.setFrame('TIT2', titleInput.value.trim());
@@ -415,8 +412,8 @@
                     const a = document.createElement('a');
                     a.href = downloadUrl;
                     
-                    const repeatTag = repeatCount > 1 ? `_${repeatCount}회반복` : '';
-                    a.download = `[태그수정${repeatTag}] ${titleInput.value.trim() || 'music'}.mp3`;
+                    // 태그 수식어 없이 곡 제목 그대로 저장
+                    a.download = `${titleInput.value.trim() || 'music'}.mp3`;
                     
                     document.body.appendChild(a);
                     a.click();
