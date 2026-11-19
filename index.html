@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 태그 & 반복 에디터</title>
-    <!-- 사이트 탭 아이콘 & 모바일 홈 화면 앱 아이콘 -->
-    <link rel="icon" type="image/jpeg" href="icon.jpg">
-    <link rel="apple-touch-icon" href="icon.jpg">
+    <!-- 사이트 탭 아이콘 & 모바일 홈 화면 앱 아이콘 (icon.jpg.png 연결) -->
+    <link rel="icon" type="image/png" href="icon.jpg.png">
+    <link rel="shortcut icon" type="image/png" href="icon.jpg.png">
+    <link rel="apple-touch-icon" href="icon.jpg.png">
+    <meta name="theme-color" content="#121212">
 
     <!-- ID3 태그 읽기 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
@@ -291,6 +293,28 @@
     </div>
 
     <script>
+        // 모바일 브라우저(삼성 인터넷/크롬) 홈 화면 & 빠른 실행 고화질 아이콘용 동적 매니페스트
+        (function setupManifest() {
+            const iconUrl = new URL('icon.jpg.png', window.location.href).href;
+            const manifest = {
+                name: 'MP3 태그 & 반복 에디터',
+                short_name: 'MP3 에디터',
+                start_url: window.location.href,
+                display: 'standalone',
+                background_color: '#121212',
+                theme_color: '#121212',
+                icons: [
+                    { src: iconUrl, sizes: '192x192', type: 'image/png' },
+                    { src: iconUrl, sizes: '512x512', type: 'image/png' }
+                ]
+            };
+            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+            const link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = URL.createObjectURL(blob);
+            document.head.appendChild(link);
+        })();
+
         let fileQueue = [];
         let activeIndex = -1;
         let isProcessing = false;
