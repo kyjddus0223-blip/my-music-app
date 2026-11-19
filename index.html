@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MP3 태그 & 반복 에디터</title>
-    <!-- 사이트 탭 아이콘 & 모바일 홈 화면 앱 아이콘 (icon.jpg.png 연결) -->
+    <!-- 사이트 탭 아이콘 & 모바일 홈 화면 앱 아이콘 (icon.jpg.png 유지) -->
     <link rel="icon" type="image/png" href="icon.jpg.png">
     <link rel="shortcut icon" type="image/png" href="icon.jpg.png">
     <link rel="apple-touch-icon" href="icon.jpg.png">
@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
     <!-- M4A -> MP3 변환 인코더 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-    <!-- 전체 ZIP 묶음 다운로드 라이브러리 -->
+    <!-- 분할 ZIP 묶음 다운로드 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body {
@@ -38,13 +38,13 @@
             border-radius: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             box-sizing: border-box;
             text-align: center;
         }
         .cover-box {
-            width: 180px;
-            height: 180px;
+            width: 160px;
+            height: 160px;
             margin: 0 auto 15px auto;
             border-radius: 12px;
             overflow: hidden;
@@ -60,7 +60,7 @@
             object-fit: cover;
         }
         .cover-placeholder {
-            font-size: 48px;
+            font-size: 44px;
             color: #555;
         }
         .file-label {
@@ -100,20 +100,20 @@
             justify-content: space-between;
         }
         .queue-list {
-            max-height: 170px;
+            max-height: 160px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
         }
         .queue-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
             background-color: #2f2f2f;
-            padding: 7px 10px;
+            padding: 6px 10px;
             border-radius: 8px;
-            font-size: 0.82em;
+            font-size: 0.8em;
             cursor: pointer;
             border: 1px solid transparent;
             gap: 6px;
@@ -129,36 +129,14 @@
             flex: 1;
             min-width: 0;
         }
-        .queue-item-right {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-shrink: 0;
-        }
         .queue-item-status {
             font-size: 0.85em;
             color: #aaa;
-        }
-        .mini-dl-btn {
-            background-color: #1db954;
-            color: #000;
-            border: none;
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 0.85em;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .mini-dl-btn:hover {
-            background-color: #1ed760;
-        }
-        .mini-dl-btn.saved {
-            background-color: #444;
-            color: #1db954;
+            flex-shrink: 0;
         }
         .input-group {
             text-align: left;
-            margin-bottom: 12px;
+            margin-bottom: 11px;
         }
         .input-group label {
             font-size: 0.8em;
@@ -184,7 +162,7 @@
             background-color: #2a2a2a;
             padding: 10px 14px;
             border-radius: 10px;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             font-size: 0.9em;
         }
         .toggle-btn {
@@ -200,10 +178,38 @@
             background-color: #1db954;
             color: #000;
         }
+        .progress-container {
+            display: none;
+            margin-top: 12px;
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 10px;
+            text-align: left;
+        }
+        .progress-top {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8em;
+            color: #ccc;
+            margin-bottom: 6px;
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 8px;
+            background-color: #3a3a3a;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background-color: #1db954;
+            transition: width 0.2s ease;
+        }
         .btn-group {
             display: flex;
             gap: 8px;
-            margin-top: 15px;
+            margin-top: 14px;
         }
         .btn {
             flex: 1;
@@ -229,15 +235,19 @@
         .btn-download:hover {
             background-color: #1ed760;
         }
-        .btn-zip {
+        .btn-stop {
             display: none;
             width: 100%;
             margin-top: 8px;
-            background-color: #2b5876;
+            background-color: #d9534f;
             color: #fff;
         }
-        .btn-zip:hover {
-            background-color: #366d91;
+        .btn-retry {
+            display: none;
+            width: 100%;
+            margin-top: 8px;
+            background-color: #e67e22;
+            color: #fff;
         }
         .btn:disabled {
             background-color: #444;
@@ -246,14 +256,15 @@
         }
         audio {
             width: 100%;
-            margin-top: 15px;
+            margin-top: 14px;
         }
         #status-msg {
             font-size: 0.8em;
             color: #1db954;
             margin-top: 10px;
             min-height: 18px;
-            line-height: 1.4;
+            line-height: 1.45;
+            word-break: keep-all;
         }
     </style>
 </head>
@@ -263,14 +274,14 @@
         <h2>🎵 MP3 태그 & 반복 에디터</h2>
 
         <label class="file-label" for="audio-file">
-            📂 음악 파일 선택하기 (여러 곡 가능)
+            📂 음악 파일 선택하기 (200곡 이상 가능)
         </label>
         <input type="file" id="audio-file" accept="audio/*" multiple>
 
         <div class="queue-box" id="queue-box">
             <div class="queue-header">
                 <span id="queue-count-text">선택된 곡 목록 (0곡)</span>
-                <span style="color:#aaa; font-weight:normal;">완료 후 개별 저장 가능</span>
+                <span style="color:#aaa; font-weight:normal;">메모리 자동 절약 모드</span>
             </div>
             <div class="queue-list" id="queue-list"></div>
         </div>
@@ -299,7 +310,7 @@
         </div>
 
         <div class="input-group">
-            <label>🔁 음원 반복해서 저장하기 (전체 곡 일괄 적용)</label>
+            <label>🔁 음원 반복 횟수 (전체 일괄 적용)</label>
             <select id="repeat-count-select">
                 <option value="1">1회 (원본 길이)</option>
                 <option value="2">2회 반복 연결</option>
@@ -318,13 +329,32 @@
             </select>
         </div>
 
+        <div class="input-group" id="batch-mode-group" style="display: none;">
+            <label>📦 대량 저장 방식 (200곡 안정화 설정)</label>
+            <select id="batch-mode-select">
+                <option value="zip20">📦 20곡씩 자동 분할 ZIP 저장 (200곡 추천)</option>
+                <option value="zip10">📦 10곡씩 자동 분할 ZIP 저장 (초저사양/고반복용)</option>
+                <option value="single">📄 1곡씩 즉시 저장 후 메모리 비우기</option>
+            </select>
+        </div>
+
         <div class="btn-group">
             <button class="btn btn-search" id="search-btn">🔍 정보 자동 검색</button>
             <button class="btn btn-download" id="download-btn" disabled>💾 태그 입혀서 저장</button>
         </div>
 
-        <!-- 여러 곡 완료 시 한 번에 받을 수 있는 ZIP 버튼 -->
-        <button class="btn btn-zip" id="zip-download-btn">🗜️ 전체 ZIP 파일로 한 번에 받기</button>
+        <button class="btn btn-stop" id="stop-btn">⏹️ 작업 안전 중단하기</button>
+        <button class="btn btn-retry" id="retry-btn">🔄 실패한 곡만 다시 실행</button>
+
+        <div class="progress-container" id="progress-container">
+            <div class="progress-top">
+                <span id="progress-label">진행률: 0 / 0곡</span>
+                <span id="progress-percent">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-bar-fill"></div>
+            </div>
+        </div>
 
         <div id="status-msg"></div>
         <audio id="audio-player" controls></audio>
@@ -355,6 +385,9 @@
         let fileQueue = [];
         let activeIndex = -1;
         let isProcessing = false;
+        let stopRequested = false;
+        let wakeLock = null;
+        let currentPreviewCoverUrl = '';
 
         const fileInput = document.getElementById('audio-file');
         const queueBox = document.getElementById('queue-box');
@@ -368,18 +401,45 @@
         const placeholder = document.getElementById('placeholder');
         const searchBtn = document.getElementById('search-btn');
         const downloadBtn = document.getElementById('download-btn');
-        const zipDownloadBtn = document.getElementById('zip-download-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const retryBtn = document.getElementById('retry-btn');
+        const batchModeGroup = document.getElementById('batch-mode-group');
+        const batchModeSelect = document.getElementById('batch-mode-select');
+        const progressContainer = document.getElementById('progress-container');
+        const progressLabel = document.getElementById('progress-label');
+        const progressPercent = document.getElementById('progress-percent');
+        const progressBarFill = document.getElementById('progress-bar-fill');
         const statusMsg = document.getElementById('status-msg');
         const loopToggleBtn = document.getElementById('loop-toggle-btn');
         const repeatCountSelect = document.getElementById('repeat-count-select');
 
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+        async function requestScreenWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                // 미지원 브라우저 무시
+            }
+        }
+
+        async function releaseScreenWakeLock() {
+            try {
+                if (wakeLock) {
+                    await wakeLock.release();
+                    wakeLock = null;
+                }
+            } catch (err) {}
+        }
+
         function sanitizeFileName(name) {
             return (name || 'music').replace(/[\\/:*?"<>|]/g, '_').trim() || 'music';
         }
 
-        function triggerBrowserDownload(url, fileName) {
+        function triggerBrowserDownload(blob, fileName) {
+            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = fileName;
@@ -387,6 +447,8 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+            // 브라우저가 다운로드를 시작한 뒤 15초 후 메모리에서 URL 즉시 해제
+            setTimeout(() => URL.revokeObjectURL(url), 15000);
         }
 
         loopToggleBtn.addEventListener('click', () => {
@@ -410,59 +472,81 @@
             return false;
         }
 
-        function readFileTags(file) {
+        // 1곡의 태그와 커버를 필요할 때만 읽어오는 지연 로딩 함수 (메모리 절약 핵심)
+        function readSingleFileMetadata(file) {
             return new Promise((resolve) => {
-                const defaultTitle = file.name.replace(/\.[^/.]+$/, "");
-                const item = {
-                    file: file,
-                    title: defaultTitle,
-                    artist: '',
-                    composer: '',
-                    coverBuffer: null,
-                    coverMimeType: 'image/jpeg',
-                    coverPreviewUrl: '',
-                    status: '대기',
-                    resultBlob: null,
-                    downloadUrl: '',
-                    outputFileName: '',
-                    manuallySaved: false
-                };
-
                 window.jsmediatags.read(file, {
                     onSuccess: function(tag) {
                         const tags = tag.tags;
-                        if (tags.title) item.title = tags.title;
-                        if (tags.artist) item.artist = tags.artist;
-                        if (tags.composer) item.composer = tags.composer;
+                        let coverBuffer = null;
+                        let coverMimeType = 'image/jpeg';
 
                         if (tags.picture) {
                             const { data, format } = tags.picture;
-                            const byteArray = new Uint8Array(data);
-                            item.coverBuffer = byteArray.buffer;
-                            item.coverMimeType = format || 'image/jpeg';
-                            const blob = new Blob([byteArray], { type: item.coverMimeType });
-                            item.coverPreviewUrl = URL.createObjectURL(blob);
+                            coverBuffer = new Uint8Array(data).buffer;
+                            coverMimeType = format || 'image/jpeg';
                         }
-                        resolve(item);
+
+                        resolve({
+                            title: tags.title || '',
+                            artist: tags.artist || '',
+                            composer: tags.composer || '',
+                            coverBuffer,
+                            coverMimeType
+                        });
                     },
                     onError: function() {
-                        resolve(item);
+                        resolve({
+                            title: '',
+                            artist: '',
+                            composer: '',
+                            coverBuffer: null,
+                            coverMimeType: 'image/jpeg'
+                        });
                     }
                 });
             });
         }
 
-        function selectQueueItem(index) {
+        async function selectQueueItem(index) {
             if (index < 0 || index >= fileQueue.length) return;
+            const prevIndex = activeIndex;
             activeIndex = index;
             const item = fileQueue[index];
+
+            if (prevIndex >= 0) {
+                const prevRow = document.getElementById(`q-row-${prevIndex}`);
+                if (prevRow) prevRow.classList.remove('selected');
+            }
+            const curRow = document.getElementById(`q-row-${index}`);
+            if (curRow) curRow.classList.add('selected');
+
+            if (currentPreviewCoverUrl) {
+                URL.revokeObjectURL(currentPreviewCoverUrl);
+                currentPreviewCoverUrl = '';
+            }
+
+            // 처음 클릭하는 곡이면 그때 태그/커버를 읽음 (200곡 동시 로딩 방지)
+            const meta = await readSingleFileMetadata(item.file);
+            if (!item.edited) {
+                if (meta.title) item.title = meta.title;
+                if (meta.artist) item.artist = meta.artist;
+                if (meta.composer) item.composer = meta.composer;
+                const titleEl = document.getElementById(`q-title-${index}`);
+                if (titleEl) titleEl.textContent = `${index + 1}. ${item.title}`;
+            }
 
             titleInput.value = item.title;
             artistInput.value = item.artist;
             composerInput.value = item.composer;
 
-            if (item.coverPreviewUrl) {
-                coverImg.src = item.coverPreviewUrl;
+            const activeCoverBuf = item.customCoverBuffer || meta.coverBuffer;
+            const activeCoverMime = item.customCoverBuffer ? item.customCoverMime : meta.coverMimeType;
+
+            if (activeCoverBuf) {
+                const blob = new Blob([activeCoverBuf], { type: activeCoverMime });
+                currentPreviewCoverUrl = URL.createObjectURL(blob);
+                coverImg.src = currentPreviewCoverUrl;
                 coverImg.style.display = 'block';
                 placeholder.style.display = 'none';
             } else {
@@ -473,118 +557,117 @@
 
             if (audioPlayer.src) URL.revokeObjectURL(audioPlayer.src);
             audioPlayer.src = URL.createObjectURL(item.file);
-
-            renderQueueList();
         }
 
-        function renderQueueList() {
+        function buildInitialQueueDOM() {
             if (fileQueue.length <= 1) {
                 queueBox.style.display = 'none';
+                batchModeGroup.style.display = 'none';
                 downloadBtn.innerText = '💾 태그 입혀서 저장';
-                zipDownloadBtn.style.display = 'none';
                 return;
             }
 
             queueBox.style.display = 'block';
+            batchModeGroup.style.display = 'block';
             queueCountText.innerText = `선택된 곡 목록 (${fileQueue.length}곡)`;
-            downloadBtn.innerText = `💾 전체 변환·반복 시작 (${fileQueue.length}곡)`;
+            downloadBtn.innerText = `💾 전체 일괄 시작 (${fileQueue.length}곡)`;
 
-            const completedItems = fileQueue.filter(item => item.resultBlob);
-            if (completedItems.length >= 2 && !isProcessing) {
-                zipDownloadBtn.style.display = 'block';
-                zipDownloadBtn.innerText = `🗜️ 전체 ZIP 파일로 한 번에 받기 (${completedItems.length}곡)`;
-            } else {
-                zipDownloadBtn.style.display = 'none';
-            }
-
-            queueList.innerHTML = '';
+            const fragment = document.createDocumentFragment();
             fileQueue.forEach((item, idx) => {
                 const row = document.createElement('div');
+                row.id = `q-row-${idx}`;
                 row.className = 'queue-item' + (idx === activeIndex ? ' selected' : '');
 
                 const titleSpan = document.createElement('span');
+                titleSpan.id = `q-title-${idx}`;
                 titleSpan.className = 'queue-item-title';
                 titleSpan.textContent = `${idx + 1}. ${item.title}`;
 
-                const rightDiv = document.createElement('div');
-                rightDiv.className = 'queue-item-right';
-
                 const statusSpan = document.createElement('span');
+                statusSpan.id = `q-status-${idx}`;
                 statusSpan.className = 'queue-item-status';
                 statusSpan.textContent = item.status;
-                rightDiv.appendChild(statusSpan);
-
-                // 변환 완료된 곡은 브라우저 차단 없이 언제든 직접 눌러 받을 수 있는 개별 버튼 제공
-                if (item.downloadUrl) {
-                    const dlBtn = document.createElement('button');
-                    dlBtn.type = 'button';
-                    dlBtn.className = 'mini-dl-btn' + (item.manuallySaved ? ' saved' : '');
-                    dlBtn.textContent = item.manuallySaved ? '📥 다시받기' : '📥 저장';
-                    dlBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        triggerBrowserDownload(item.downloadUrl, item.outputFileName);
-                        item.manuallySaved = true;
-                        dlBtn.className = 'mini-dl-btn saved';
-                        dlBtn.textContent = '📥 다시받기';
-                    });
-                    rightDiv.appendChild(dlBtn);
-                }
 
                 row.appendChild(titleSpan);
-                row.appendChild(rightDiv);
+                row.appendChild(statusSpan);
 
                 row.addEventListener('click', () => {
                     if (!isProcessing) selectQueueItem(idx);
                 });
-                queueList.appendChild(row);
+                fragment.appendChild(row);
             });
+
+            queueList.innerHTML = '';
+            queueList.appendChild(fragment);
+        }
+
+        function updateItemStatusUI(idx, newStatus, scrollIntoView = false) {
+            fileQueue[idx].status = newStatus;
+            const statusEl = document.getElementById(`q-status-${idx}`);
+            if (statusEl) statusEl.textContent = newStatus;
+
+            if (scrollIntoView) {
+                const rowEl = document.getElementById(`q-row-${idx}`);
+                if (rowEl) rowEl.scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function updateProgressUI(doneCount, totalCount) {
+            const pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+            progressLabel.textContent = `진행률: ${doneCount} / ${totalCount}곡`;
+            progressPercent.textContent = `${pct}%`;
+            progressBarFill.style.width = `${pct}%`;
         }
 
         titleInput.addEventListener('input', () => {
             if (activeIndex >= 0 && fileQueue[activeIndex]) {
                 fileQueue[activeIndex].title = titleInput.value;
-                renderQueueList();
+                fileQueue[activeIndex].edited = true;
+                const titleEl = document.getElementById(`q-title-${activeIndex}`);
+                if (titleEl) titleEl.textContent = `${activeIndex + 1}. ${titleInput.value}`;
             }
         });
         artistInput.addEventListener('input', () => {
             if (activeIndex >= 0 && fileQueue[activeIndex]) {
                 fileQueue[activeIndex].artist = artistInput.value;
+                fileQueue[activeIndex].edited = true;
             }
         });
         composerInput.addEventListener('input', () => {
             if (activeIndex >= 0 && fileQueue[activeIndex]) {
                 fileQueue[activeIndex].composer = composerInput.value;
+                fileQueue[activeIndex].edited = true;
             }
         });
 
+        // 파일 다중 선택 (200곡도 0.1초 만에 즉시 목록화)
         fileInput.addEventListener('change', async function(e) {
             const files = Array.from(e.target.files);
             if (!files.length) return;
 
-            fileQueue.forEach(item => {
-                if (item.coverPreviewUrl) URL.revokeObjectURL(item.coverPreviewUrl);
-                if (item.downloadUrl) URL.revokeObjectURL(item.downloadUrl);
-            });
+            retryBtn.style.display = 'none';
+            progressContainer.style.display = 'none';
 
-            statusMsg.innerText = `${files.length}곡의 커버 및 태그 정보를 불러오는 중...`;
-            downloadBtn.disabled = true;
-            zipDownloadBtn.style.display = 'none';
+            fileQueue = files.map((file) => ({
+                file: file,
+                title: file.name.replace(/\.[^/.]+$/, ""),
+                artist: '',
+                composer: '',
+                edited: false,
+                customCoverBuffer: null,
+                customCoverMime: 'image/jpeg',
+                status: '대기'
+            }));
 
-            fileQueue = [];
-            for (const file of files) {
-                const item = await readFileTags(file);
-                fileQueue.push(item);
-            }
-
-            selectQueueItem(0);
+            activeIndex = 0;
+            buildInitialQueueDOM();
+            await selectQueueItem(0);
             downloadBtn.disabled = false;
 
             if (fileQueue.length === 1) {
-                statusMsg.innerText = fileQueue[0].coverBuffer
-                    ? "✅ 기존 커버 및 태그 정보를 불러왔습니다!"
-                    : "기존 커버가 없어 검색 버튼으로 찾으실 수 있습니다.";
+                statusMsg.innerText = "✅ 파일을 불러왔습니다!";
             } else {
-                statusMsg.innerText = `✅ 총 ${fileQueue.length}곡 준비 완료! 곡별 기존 커버가 유지됩니다.`;
+                statusMsg.innerText = `✅ 총 ${fileQueue.length}곡 대기열 준비 완료!\n곡별 기존 커버·태그는 작업 시 자동으로 추출되어 유지됩니다.`;
             }
         });
 
@@ -605,18 +688,17 @@
                     item.title = info.trackName || item.title;
                     item.artist = info.artistName || '';
                     item.composer = info.artistName || '';
+                    item.edited = true;
 
                     if (info.artworkUrl100) {
                         const highResUrl = info.artworkUrl100.replace('100x100bb', '600x600bb');
                         const imgRes = await fetch(highResUrl);
-                        item.coverBuffer = await imgRes.arrayBuffer();
-                        item.coverMimeType = imgRes.headers.get('content-type') || 'image/jpeg';
-                        if (item.coverPreviewUrl) URL.revokeObjectURL(item.coverPreviewUrl);
-                        item.coverPreviewUrl = highResUrl;
+                        item.customCoverBuffer = await imgRes.arrayBuffer();
+                        item.customCoverMime = imgRes.headers.get('content-type') || 'image/jpeg';
                     }
 
                     if (activeIndex === targetIdx) {
-                        selectQueueItem(targetIdx);
+                        await selectQueueItem(targetIdx);
                     }
                     statusMsg.innerText = "✅ 온라인 음악 정보 및 새 커버를 가져왔습니다!";
                 } else {
@@ -701,21 +783,29 @@
             return merged.buffer;
         }
 
-        async function processSingleItem(item, repeatCount, index, total, usedNames) {
-            // 이전 작업 결과가 있다면 정리
-            if (item.downloadUrl) {
-                URL.revokeObjectURL(item.downloadUrl);
-                item.downloadUrl = '';
+        // 1곡만 독립 스코프에서 변환·반복 후 Blob만 반환 (함수 종료 즉시 내부 버퍼 GC 회수)
+        async function buildSingleRepeatedMp3(item, repeatCount, stepIndex, totalSteps, usedNames) {
+            const meta = await readSingleFileMetadata(item.file);
+
+            const finalTitle = (item.edited ? item.title : (meta.title || item.title)).trim() || 'music';
+            const finalArtist = (item.edited ? item.artist : (meta.artist || item.artist)).trim();
+            const finalComposer = (item.edited ? item.composer : (meta.composer || item.composer)).trim();
+            const coverBuffer = item.customCoverBuffer || meta.coverBuffer;
+            const coverMimeType = item.customCoverBuffer ? item.customCoverMime : meta.coverMimeType;
+
+            // 목록 제목도 실제 태그 제목으로 업데이트
+            const queueIdx = fileQueue.indexOf(item);
+            if (queueIdx >= 0) {
+                const titleEl = document.getElementById(`q-title-${queueIdx}`);
+                if (titleEl) titleEl.textContent = `${queueIdx + 1}. ${finalTitle}`;
             }
-            item.resultBlob = null;
-            item.manuallySaved = false;
 
             let rawBuffer = await item.file.arrayBuffer();
             let baseAudioBuffer;
 
             if (isMp4(rawBuffer)) {
-                statusMsg.innerText = `[${index + 1}/${total}] "${item.title}" M4A → MP3 변환 중...`;
-                await sleep(50);
+                statusMsg.innerText = `[${stepIndex + 1}/${totalSteps}] "${finalTitle}" M4A → MP3 변환 중...`;
+                await sleep(30);
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const decodedBuffer = await audioCtx.decodeAudioData(rawBuffer.slice(0));
                 baseAudioBuffer = audioBufferToMp3(decodedBuffer);
@@ -725,8 +815,8 @@
             }
             rawBuffer = null;
 
-            statusMsg.innerText = `[${index + 1}/${total}] "${item.title}" ${repeatCount}회 반복 및 태그 생성 중...`;
-            await sleep(50);
+            statusMsg.innerText = `[${stepIndex + 1}/${totalSteps}] "${finalTitle}" ${repeatCount}회 반복 생성 중...`;
+            await sleep(30);
 
             const sourceArray = new Uint8Array(baseAudioBuffer);
             const finalArray = new Uint8Array(baseAudioBuffer.byteLength * repeatCount);
@@ -736,122 +826,183 @@
             baseAudioBuffer = null;
 
             const writer = new ID3Writer(finalArray.buffer);
-            const cleanTitle = (item.title || '').trim();
-            const cleanArtist = (item.artist || '').trim();
-            const cleanComposer = (item.composer || '').trim();
+            if (finalTitle) writer.setFrame('TIT2', finalTitle);
+            if (finalArtist) writer.setFrame('TPE1', [finalArtist]);
+            if (finalComposer) writer.setFrame('TCOM', [finalComposer]);
 
-            if (cleanTitle) writer.setFrame('TIT2', cleanTitle);
-            if (cleanArtist) writer.setFrame('TPE1', [cleanArtist]);
-            if (cleanComposer) writer.setFrame('TCOM', [cleanComposer]);
-
-            if (item.coverBuffer) {
+            if (coverBuffer) {
                 writer.setFrame('APIC', {
                     type: 3,
-                    data: item.coverBuffer,
+                    data: coverBuffer,
                     description: 'Cover',
-                    mime: item.coverMimeType
+                    mime: coverMimeType
                 });
             }
 
             writer.addTag();
+            const resultBlob = writer.getBlob();
 
-            // 중복 파일명 방지 처리
-            const baseFileName = sanitizeFileName(cleanTitle);
-            let finalFileName = `${baseFileName}.mp3`;
+            // 중복 파일명 방지
+            const baseFileName = sanitizeFileName(finalTitle);
+            let outputFileName = `${baseFileName}.mp3`;
             let counter = 2;
-            while (usedNames.has(finalFileName.toLowerCase())) {
-                finalFileName = `${baseFileName} (${counter}).mp3`;
+            while (usedNames.has(outputFileName.toLowerCase())) {
+                outputFileName = `${baseFileName} (${counter}).mp3`;
                 counter++;
             }
-            usedNames.add(finalFileName.toLowerCase());
+            usedNames.add(outputFileName.toLowerCase());
 
-            const blob = writer.getBlob();
-            const downloadUrl = URL.createObjectURL(blob);
-
-            item.resultBlob = blob;
-            item.downloadUrl = downloadUrl;
-            item.outputFileName = finalFileName;
-
-            // 자동 다운로드 시도
-            triggerBrowserDownload(downloadUrl, finalFileName);
-            if (index === 0) {
-                item.manuallySaved = true;
-            }
+            return { blob: resultBlob, fileName: outputFileName };
         }
 
-        downloadBtn.addEventListener('click', async () => {
-            if (!fileQueue.length || isProcessing) return;
+        async function runBatch(targetIndices) {
+            if (!targetIndices.length || isProcessing) return;
 
             isProcessing = true;
+            stopRequested = false;
             downloadBtn.disabled = true;
             searchBtn.disabled = true;
             fileInput.disabled = true;
-            zipDownloadBtn.style.display = 'none';
+            batchModeSelect.disabled = true;
+            repeatCountSelect.disabled = true;
+            retryBtn.style.display = 'none';
+
+            if (targetIndices.length > 1) {
+                stopBtn.style.display = 'block';
+                progressContainer.style.display = 'block';
+            }
+
+            await requestScreenWakeLock();
 
             const repeatCount = parseInt(repeatCountSelect.value, 10);
-            const total = fileQueue.length;
+            const mode = fileQueue.length === 1 ? 'single' : batchModeSelect.value;
+            const zipChunkSize = mode === 'zip10' ? 10 : (mode === 'zip20' ? 20 : 0);
+
+            const total = targetIndices.length;
             const usedNames = new Set();
             let successCount = 0;
+            let failCount = 0;
 
-            for (let i = 0; i < total; i++) {
-                const item = fileQueue[i];
-                item.status = '⏳ 처리중';
-                renderQueueList();
+            let currentZip = zipChunkSize > 0 ? new JSZip() : null;
+            let itemsInCurrentZip = 0;
+            let zipPartNumber = 1;
+            let chunkStartNumber = 1;
+
+            updateProgressUI(0, total);
+
+            for (let step = 0; step < total; step++) {
+                if (stopRequested) {
+                    statusMsg.innerText = `⏹️ 사용자 요청으로 작업이 중단되었습니다. (완료: ${successCount}곡)`;
+                    break;
+                }
+
+                const idx = targetIndices[step];
+                const item = fileQueue[idx];
+                updateItemStatusUI(idx, '⏳ 처리중', true);
 
                 try {
-                    await processSingleItem(item, repeatCount, i, total, usedNames);
-                    item.status = '✅ 완료';
+                    let result = await buildSingleRepeatedMp3(item, repeatCount, step, total, usedNames);
+
+                    if (zipChunkSize > 0) {
+                        // 무압축(STORE) 방식으로 ZIP에 담아 CPU와 메모리 소모 최소화
+                        currentZip.file(result.fileName, result.blob, { compression: 'STORE' });
+                        result.blob = null; // 개별 Blob 참조 즉시 해제
+                        result = null;
+                        itemsInCurrentZip++;
+
+                        const isLastItem = (step === total - 1);
+                        if (itemsInCurrentZip >= zipChunkSize || isLastItem) {
+                            const chunkEndNumber = chunkStartNumber + itemsInCurrentZip - 1;
+                            statusMsg.innerText = `📦 Part ${zipPartNumber} (${chunkStartNumber}~${chunkEndNumber}번 곡) ZIP 저장 및 메모리 비우는 중...`;
+                            await sleep(100);
+
+                            const zipBlob = await currentZip.generateAsync({
+                                type: 'blob',
+                                compression: 'STORE'
+                            });
+
+                            triggerBrowserDownload(zipBlob, `반복음원_Part${zipPartNumber}_${chunkStartNumber}-${chunkEndNumber}번.zip`);
+
+                            // ZIP 객체 및 버퍼 완전히 초기화하여 램 회수
+                            currentZip = isLastItem ? null : new JSZip();
+                            itemsInCurrentZip = 0;
+                            zipPartNumber++;
+                            chunkStartNumber = chunkEndNumber + 1;
+
+                            // 가비지 컬렉션(메모리 정리)을 위한 짧은 휴식
+                            await sleep(1200);
+                        }
+                    } else {
+                        // 1곡씩 즉시 저장 후 메모리 비우기
+                        triggerBrowserDownload(result.blob, result.fileName);
+                        result.blob = null;
+                        result = null;
+                        if (step < total - 1) {
+                            await sleep(1200);
+                        }
+                    }
+
+                    updateItemStatusUI(idx, '✅ 완료', false);
                     successCount++;
                 } catch (err) {
                     console.error(err);
-                    item.status = '❌ 실패';
+                    updateItemStatusUI(idx, '❌ 실패', false);
+                    failCount++;
                 }
-                renderQueueList();
 
-                // 브라우저가 연속 다운로드를 처리할 수 있도록 1.5초 간격 유지
-                if (i < total - 1) {
-                    await sleep(1500);
-                }
+                updateProgressUI(step + 1, total);
             }
+
+            // 중단되었는데 ZIP 안에 남은 곡이 있으면 마저 다운로드
+            if (stopRequested && currentZip && itemsInCurrentZip > 0) {
+                try {
+                    const zipBlob = await currentZip.generateAsync({ type: 'blob', compression: 'STORE' });
+                    triggerBrowserDownload(zipBlob, `반복음원_중단전_${itemsInCurrentZip}곡.zip`);
+                } catch (e) {}
+                currentZip = null;
+            }
+
+            await releaseScreenWakeLock();
 
             isProcessing = false;
             downloadBtn.disabled = false;
             searchBtn.disabled = false;
             fileInput.disabled = false;
-            renderQueueList();
+            batchModeSelect.disabled = false;
+            repeatCountSelect.disabled = false;
+            stopBtn.style.display = 'none';
 
-            if (total === 1 && successCount === 1) {
-                statusMsg.innerText = "🎉 다운로드가 완료되었습니다!";
-            } else {
-                statusMsg.innerText = `🎉 총 ${total}곡 중 ${successCount}곡 작업 완료!\n모바일에서 자동 다운이 막힌 곡은 위 목록의 [📥 저장] 또는 아래 [ZIP 받기]를 눌러주세요.`;
+            if (failCount > 0) {
+                retryBtn.style.display = 'block';
+                retryBtn.innerText = `🔄 실패한 곡만 다시 실행 (${failCount}곡)`;
             }
+
+            if (!stopRequested) {
+                if (total === 1 && successCount === 1) {
+                    statusMsg.innerText = "🎉 다운로드가 완료되었습니다!";
+                } else {
+                    statusMsg.innerText = `🎉 전체 작업 완료! (성공: ${successCount}곡 / 실패: ${failCount}곡)\n분할 저장된 ZIP 파일은 내 파일 앱에서 압축을 풀어주세요.`;
+                }
+            }
+        }
+
+        downloadBtn.addEventListener('click', () => {
+            const allIndices = fileQueue.map((_, idx) => idx);
+            runBatch(allIndices);
         });
 
-        // 전체 완료된 곡을 하나의 ZIP 파일로 묶어서 다운로드
-        zipDownloadBtn.addEventListener('click', async () => {
-            const completedItems = fileQueue.filter(item => item.resultBlob);
-            if (!completedItems.length || isProcessing) return;
+        retryBtn.addEventListener('click', () => {
+            const failedIndices = fileQueue
+                .map((item, idx) => (item.status === '❌ 실패' ? idx : -1))
+                .filter(idx => idx !== -1);
+            runBatch(failedIndices);
+        });
 
-            zipDownloadBtn.disabled = true;
-            statusMsg.innerText = `📦 ${completedItems.length}곡을 하나의 ZIP 파일로 묶는 중...`;
-
-            try {
-                const zip = new JSZip();
-                completedItems.forEach(item => {
-                    zip.file(item.outputFileName, item.resultBlob);
-                });
-
-                const zipBlob = await zip.generateAsync({ type: 'blob' });
-                const zipUrl = URL.createObjectURL(zipBlob);
-                triggerBrowserDownload(zipUrl, `반복음원_${completedItems.length}곡.zip`);
-
-                statusMsg.innerText = "🎉 ZIP 파일 다운로드가 시작되었습니다! (내 파일 앱에서 압축 풀기)";
-            } catch (err) {
-                console.error(err);
-                alert("ZIP 파일 생성 중 오류가 발생했습니다.");
-                statusMsg.innerText = "ZIP 파일 생성 실패";
-            } finally {
-                zipDownloadBtn.disabled = false;
+        stopBtn.addEventListener('click', () => {
+            if (isProcessing) {
+                stopRequested = true;
+                stopBtn.disabled = true;
+                stopBtn.innerText = "⏳ 현재 곡 마무리 후 중단 중...";
             }
         });
     </script>
