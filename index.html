@@ -45,7 +45,7 @@
         .cover-box {
             width: 160px;
             height: 160px;
-            margin: 0 auto 15px auto;
+            margin: 0 auto 10px auto;
             border-radius: 12px;
             overflow: hidden;
             background-color: #2a2a2a;
@@ -63,6 +63,30 @@
             font-size: 44px;
             color: #555;
         }
+        .cover-actions {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+        .cover-pick-label {
+            display: inline-block;
+            background-color: #2b2b2b;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.78em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .cover-pick-label:hover {
+            background-color: #383838;
+        }
+        input[type="file"] {
+            display: none;
+        }
         .file-label {
             display: inline-block;
             background-color: #1db954;
@@ -78,9 +102,6 @@
         }
         .file-label:hover {
             background-color: #1ed760;
-        }
-        input[type="file"] {
-            display: none;
         }
         .queue-box {
             display: none;
@@ -213,12 +234,12 @@
         }
         .btn {
             flex: 1;
-            padding: 12px;
+            padding: 11px;
             border-radius: 10px;
             border: none;
             font-weight: bold;
             cursor: pointer;
-            font-size: 0.9em;
+            font-size: 0.88em;
             transition: 0.2s;
         }
         .btn-search {
@@ -227,6 +248,13 @@
         }
         .btn-search:hover {
             background-color: #444;
+        }
+        .btn-yt {
+            background-color: #c4302b;
+            color: #fff;
+        }
+        .btn-yt:hover {
+            background-color: #db3a34;
         }
         .btn-download {
             background-color: #1db954;
@@ -291,6 +319,13 @@
             <img id="cover-img" src="" alt="Album Cover" style="display: none;">
         </div>
 
+        <div class="cover-actions">
+            <label class="cover-pick-label" for="cover-file-input">
+                🖼️ 커버 직접 선택
+            </label>
+            <input type="file" id="cover-file-input" accept="image/*">
+        </div>
+
         <div class="input-group">
             <label>곡 제목 (Title)</label>
             <input type="text" id="title-input" placeholder="노래 제목 입력">
@@ -339,7 +374,11 @@
         </div>
 
         <div class="btn-group">
-            <button class="btn btn-search" id="search-btn">🔍 정보 자동 검색</button>
+            <button class="btn btn-search" id="search-btn">🔍 정보 검색</button>
+            <button class="btn btn-yt" id="yt-search-btn">🎬 유튜브 썸네일</button>
+        </div>
+
+        <div class="btn-group" style="margin-top: 8px;">
             <button class="btn btn-download" id="download-btn" disabled>💾 태그 입혀서 저장</button>
         </div>
 
@@ -390,6 +429,7 @@
         let currentPreviewCoverUrl = '';
 
         const fileInput = document.getElementById('audio-file');
+        const coverFileInput = document.getElementById('cover-file-input');
         const queueBox = document.getElementById('queue-box');
         const queueCountText = document.getElementById('queue-count-text');
         const queueList = document.getElementById('queue-list');
@@ -400,6 +440,7 @@
         const coverImg = document.getElementById('cover-img');
         const placeholder = document.getElementById('placeholder');
         const searchBtn = document.getElementById('search-btn');
+        const ytSearchBtn = document.getElementById('yt-search-btn');
         const downloadBtn = document.getElementById('download-btn');
         const stopBtn = document.getElementById('stop-btn');
         const retryBtn = document.getElementById('retry-btn');
@@ -420,9 +461,7 @@
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
                 }
-            } catch (err) {
-                // 미지원 브라우저 무시
-            }
+            } catch (err) {}
         }
 
         async function releaseScreenWakeLock() {
@@ -447,7 +486,6 @@
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            // 브라우저가 다운로드를 시작한 뒤 15초 후 메모리에서 URL 즉시 해제
             setTimeout(() => URL.revokeObjectURL(url), 15000);
         }
 
@@ -472,7 +510,6 @@
             return false;
         }
 
-        // 1곡의 태그와 커버를 필요할 때만 읽어오는 지연 로딩 함수 (메모리 절약 핵심)
         function readSingleFileMetadata(file) {
             return new Promise((resolve) => {
                 window.jsmediatags.read(file, {
@@ -526,7 +563,6 @@
                 currentPreviewCoverUrl = '';
             }
 
-            // 처음 클릭하는 곡이면 그때 태그/커버를 읽음 (200곡 동시 로딩 방지)
             const meta = await readSingleFileMetadata(item.file);
             if (!item.edited) {
                 if (meta.title) item.title = meta.title;
@@ -558,6 +594,31 @@
             if (audioPlayer.src) URL.revokeObjectURL(audioPlayer.src);
             audioPlayer.src = URL.createObjectURL(item.file);
         }
+
+        // 직접 이미지 파일 선택 시 현재 곡에 적용
+        coverFileInput.addEventListener('change', async function(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file || activeIndex < 0 || !fileQueue[activeIndex]) return;
+
+            try {
+                const buf = await file.arrayBuffer();
+                const item = fileQueue[activeIndex];
+                item.customCoverBuffer = buf;
+                item.customCoverMime = file.type || 'image/jpeg';
+
+                if (currentPreviewCoverUrl) URL.revokeObjectURL(currentPreviewCoverUrl);
+                currentPreviewCoverUrl = URL.createObjectURL(new Blob([buf], { type: item.customCoverMime }));
+                coverImg.src = currentPreviewCoverUrl;
+                coverImg.style.display = 'block';
+                placeholder.style.display = 'none';
+
+                statusMsg.innerText = "✅ 선택한 이미지가 현재 곡 커버로 적용되었습니다!";
+            } catch (err) {
+                statusMsg.innerText = "이미지 불러오기 중 오류가 발생했습니다.";
+            } finally {
+                coverFileInput.value = '';
+            }
+        });
 
         function buildInitialQueueDOM() {
             if (fileQueue.length <= 1) {
@@ -640,7 +701,6 @@
             }
         });
 
-        // 파일 다중 선택 (200곡도 0.1초 만에 즉시 목록화)
         fileInput.addEventListener('change', async function(e) {
             const files = Array.from(e.target.files);
             if (!files.length) return;
@@ -708,6 +768,73 @@
                 statusMsg.innerText = "정보 검색 중 오류가 발생했습니다.";
             }
         }
+
+        // 유튜브 제목 검색으로 영상 ID 추출 후 썸네일 가져오기
+        ytSearchBtn.addEventListener('click', async () => {
+            const query = titleInput.value.trim();
+            if (!query || activeIndex < 0) return;
+
+            statusMsg.innerText = "🎬 유튜브에서 관련 영상 썸네일을 찾는 중...";
+            ytSearchBtn.disabled = true;
+
+            try {
+                const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(searchUrl)}`;
+                const htmlRes = await fetch(proxyUrl);
+                if (!htmlRes.ok) throw new Error('검색 응답 실패');
+
+                const htmlText = await htmlRes.text();
+                const match = htmlText.match(/"videoId":"([a-zA-Z0-9_-]{11})"/);
+
+                if (!match || !match[1]) {
+                    statusMsg.innerText = "유튜브 검색 결과를 찾지 못했습니다. [커버 직접 선택]을 이용해 주세요.";
+                    return;
+                }
+
+                const videoId = match[1];
+                const candidates = [
+                    `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+                    `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+                ];
+
+                let fetchedBuf = null;
+                let fetchedMime = 'image/jpeg';
+
+                for (const thumbUrl of candidates) {
+                    try {
+                        const imgRes = await fetch(thumbUrl);
+                        if (imgRes.ok) {
+                            const buf = await imgRes.arrayBuffer();
+                            // 유튜브 maxresdefault 미존재 시 반환되는 작은 기본 회색 이미지(약 1KB 내외) 필터링
+                            if (buf.byteLength > 3000) {
+                                fetchedBuf = buf;
+                                fetchedMime = imgRes.headers.get('content-type') || 'image/jpeg';
+                                break;
+                            }
+                        }
+                    } catch (e) {
+                        // 다음 후보 시도
+                    }
+                }
+
+                if (!fetchedBuf) {
+                    statusMsg.innerText = "브라우저 보안 정책으로 썸네일을 직접 못 가져왔습니다. [커버 직접 선택]을 눌러 이미지를 넣어주세요.";
+                    return;
+                }
+
+                const item = fileQueue[activeIndex];
+                item.customCoverBuffer = fetchedBuf;
+                item.customCoverMime = fetchedMime;
+
+                await selectQueueItem(activeIndex);
+                statusMsg.innerText = "✅ 유튜브 영상 썸네일을 커버로 적용했습니다!";
+            } catch (err) {
+                console.error(err);
+                statusMsg.innerText = "유튜브 썸네일을 가져오지 못했습니다. [커버 직접 선택]을 이용해 주세요.";
+            } finally {
+                ytSearchBtn.disabled = false;
+            }
+        });
 
         function extractPureAudio(buffer) {
             let bytes = new Uint8Array(buffer);
@@ -783,7 +910,6 @@
             return merged.buffer;
         }
 
-        // 1곡만 독립 스코프에서 변환·반복 후 Blob만 반환 (함수 종료 즉시 내부 버퍼 GC 회수)
         async function buildSingleRepeatedMp3(item, repeatCount, stepIndex, totalSteps, usedNames) {
             const meta = await readSingleFileMetadata(item.file);
 
@@ -793,7 +919,6 @@
             const coverBuffer = item.customCoverBuffer || meta.coverBuffer;
             const coverMimeType = item.customCoverBuffer ? item.customCoverMime : meta.coverMimeType;
 
-            // 목록 제목도 실제 태그 제목으로 업데이트
             const queueIdx = fileQueue.indexOf(item);
             if (queueIdx >= 0) {
                 const titleEl = document.getElementById(`q-title-${queueIdx}`);
@@ -842,7 +967,6 @@
             writer.addTag();
             const resultBlob = writer.getBlob();
 
-            // 중복 파일명 방지
             const baseFileName = sanitizeFileName(finalTitle);
             let outputFileName = `${baseFileName}.mp3`;
             let counter = 2;
@@ -862,6 +986,7 @@
             stopRequested = false;
             downloadBtn.disabled = true;
             searchBtn.disabled = true;
+            ytSearchBtn.disabled = true;
             fileInput.disabled = true;
             batchModeSelect.disabled = true;
             repeatCountSelect.disabled = true;
@@ -904,9 +1029,8 @@
                     let result = await buildSingleRepeatedMp3(item, repeatCount, step, total, usedNames);
 
                     if (zipChunkSize > 0) {
-                        // 무압축(STORE) 방식으로 ZIP에 담아 CPU와 메모리 소모 최소화
                         currentZip.file(result.fileName, result.blob, { compression: 'STORE' });
-                        result.blob = null; // 개별 Blob 참조 즉시 해제
+                        result.blob = null;
                         result = null;
                         itemsInCurrentZip++;
 
@@ -923,17 +1047,14 @@
 
                             triggerBrowserDownload(zipBlob, `반복음원_Part${zipPartNumber}_${chunkStartNumber}-${chunkEndNumber}번.zip`);
 
-                            // ZIP 객체 및 버퍼 완전히 초기화하여 램 회수
                             currentZip = isLastItem ? null : new JSZip();
                             itemsInCurrentZip = 0;
                             zipPartNumber++;
                             chunkStartNumber = chunkEndNumber + 1;
 
-                            // 가비지 컬렉션(메모리 정리)을 위한 짧은 휴식
                             await sleep(1200);
                         }
                     } else {
-                        // 1곡씩 즉시 저장 후 메모리 비우기
                         triggerBrowserDownload(result.blob, result.fileName);
                         result.blob = null;
                         result = null;
@@ -953,7 +1074,6 @@
                 updateProgressUI(step + 1, total);
             }
 
-            // 중단되었는데 ZIP 안에 남은 곡이 있으면 마저 다운로드
             if (stopRequested && currentZip && itemsInCurrentZip > 0) {
                 try {
                     const zipBlob = await currentZip.generateAsync({ type: 'blob', compression: 'STORE' });
@@ -967,6 +1087,7 @@
             isProcessing = false;
             downloadBtn.disabled = false;
             searchBtn.disabled = false;
+            ytSearchBtn.disabled = false;
             fileInput.disabled = false;
             batchModeSelect.disabled = false;
             repeatCountSelect.disabled = false;
