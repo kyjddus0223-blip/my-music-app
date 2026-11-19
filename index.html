@@ -16,6 +16,8 @@
     <script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
     <!-- M4A -> MP3 변환 인코더 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+    <!-- 전체 ZIP 묶음 다운로드 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body {
             font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -98,11 +100,11 @@
             justify-content: space-between;
         }
         .queue-list {
-            max-height: 130px;
+            max-height: 170px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 5px;
+            gap: 6px;
         }
         .queue-item {
             display: flex;
@@ -114,6 +116,7 @@
             font-size: 0.82em;
             cursor: pointer;
             border: 1px solid transparent;
+            gap: 6px;
         }
         .queue-item.selected {
             border-color: #1db954;
@@ -123,13 +126,35 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 230px;
+            flex: 1;
+            min-width: 0;
+        }
+        .queue-item-right {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
         }
         .queue-item-status {
             font-size: 0.85em;
             color: #aaa;
-            flex-shrink: 0;
-            margin-left: 8px;
+        }
+        .mini-dl-btn {
+            background-color: #1db954;
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.85em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .mini-dl-btn:hover {
+            background-color: #1ed760;
+        }
+        .mini-dl-btn.saved {
+            background-color: #444;
+            color: #1db954;
         }
         .input-group {
             text-align: left;
@@ -204,6 +229,16 @@
         .btn-download:hover {
             background-color: #1ed760;
         }
+        .btn-zip {
+            display: none;
+            width: 100%;
+            margin-top: 8px;
+            background-color: #2b5876;
+            color: #fff;
+        }
+        .btn-zip:hover {
+            background-color: #366d91;
+        }
         .btn:disabled {
             background-color: #444;
             color: #888;
@@ -235,7 +270,7 @@
         <div class="queue-box" id="queue-box">
             <div class="queue-header">
                 <span id="queue-count-text">선택된 곡 목록 (0곡)</span>
-                <span style="color:#aaa; font-weight:normal;">클릭 시 미리보기/수정</span>
+                <span style="color:#aaa; font-weight:normal;">완료 후 개별 저장 가능</span>
             </div>
             <div class="queue-list" id="queue-list"></div>
         </div>
@@ -288,12 +323,14 @@
             <button class="btn btn-download" id="download-btn" disabled>💾 태그 입혀서 저장</button>
         </div>
 
+        <!-- 여러 곡 완료 시 한 번에 받을 수 있는 ZIP 버튼 -->
+        <button class="btn btn-zip" id="zip-download-btn">🗜️ 전체 ZIP 파일로 한 번에 받기</button>
+
         <div id="status-msg"></div>
         <audio id="audio-player" controls></audio>
     </div>
 
     <script>
-        // 모바일 브라우저(삼성 인터넷/크롬) 홈 화면 & 빠른 실행 고화질 아이콘용 동적 매니페스트
         (function setupManifest() {
             const iconUrl = new URL('icon.jpg.png', window.location.href).href;
             const manifest = {
@@ -331,11 +368,26 @@
         const placeholder = document.getElementById('placeholder');
         const searchBtn = document.getElementById('search-btn');
         const downloadBtn = document.getElementById('download-btn');
+        const zipDownloadBtn = document.getElementById('zip-download-btn');
         const statusMsg = document.getElementById('status-msg');
         const loopToggleBtn = document.getElementById('loop-toggle-btn');
         const repeatCountSelect = document.getElementById('repeat-count-select');
 
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        function sanitizeFileName(name) {
+            return (name || 'music').replace(/[\\/:*?"<>|]/g, '_').trim() || 'music';
+        }
+
+        function triggerBrowserDownload(url, fileName) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
 
         loopToggleBtn.addEventListener('click', () => {
             audioPlayer.loop = !audioPlayer.loop;
@@ -369,7 +421,11 @@
                     coverBuffer: null,
                     coverMimeType: 'image/jpeg',
                     coverPreviewUrl: '',
-                    status: '대기'
+                    status: '대기',
+                    resultBlob: null,
+                    downloadUrl: '',
+                    outputFileName: '',
+                    manuallySaved: false
                 };
 
                 window.jsmediatags.read(file, {
@@ -425,21 +481,58 @@
             if (fileQueue.length <= 1) {
                 queueBox.style.display = 'none';
                 downloadBtn.innerText = '💾 태그 입혀서 저장';
+                zipDownloadBtn.style.display = 'none';
                 return;
             }
 
             queueBox.style.display = 'block';
             queueCountText.innerText = `선택된 곡 목록 (${fileQueue.length}곡)`;
-            downloadBtn.innerText = `💾 전체 순차 저장 (${fileQueue.length}곡)`;
+            downloadBtn.innerText = `💾 전체 변환·반복 시작 (${fileQueue.length}곡)`;
+
+            const completedItems = fileQueue.filter(item => item.resultBlob);
+            if (completedItems.length >= 2 && !isProcessing) {
+                zipDownloadBtn.style.display = 'block';
+                zipDownloadBtn.innerText = `🗜️ 전체 ZIP 파일로 한 번에 받기 (${completedItems.length}곡)`;
+            } else {
+                zipDownloadBtn.style.display = 'none';
+            }
 
             queueList.innerHTML = '';
             fileQueue.forEach((item, idx) => {
                 const row = document.createElement('div');
                 row.className = 'queue-item' + (idx === activeIndex ? ' selected' : '');
-                row.innerHTML = `
-                    <span class="queue-item-title">${idx + 1}. ${item.title}</span>
-                    <span class="queue-item-status">${item.status}</span>
-                `;
+
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'queue-item-title';
+                titleSpan.textContent = `${idx + 1}. ${item.title}`;
+
+                const rightDiv = document.createElement('div');
+                rightDiv.className = 'queue-item-right';
+
+                const statusSpan = document.createElement('span');
+                statusSpan.className = 'queue-item-status';
+                statusSpan.textContent = item.status;
+                rightDiv.appendChild(statusSpan);
+
+                // 변환 완료된 곡은 브라우저 차단 없이 언제든 직접 눌러 받을 수 있는 개별 버튼 제공
+                if (item.downloadUrl) {
+                    const dlBtn = document.createElement('button');
+                    dlBtn.type = 'button';
+                    dlBtn.className = 'mini-dl-btn' + (item.manuallySaved ? ' saved' : '');
+                    dlBtn.textContent = item.manuallySaved ? '📥 다시받기' : '📥 저장';
+                    dlBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        triggerBrowserDownload(item.downloadUrl, item.outputFileName);
+                        item.manuallySaved = true;
+                        dlBtn.className = 'mini-dl-btn saved';
+                        dlBtn.textContent = '📥 다시받기';
+                    });
+                    rightDiv.appendChild(dlBtn);
+                }
+
+                row.appendChild(titleSpan);
+                row.appendChild(rightDiv);
+
                 row.addEventListener('click', () => {
                     if (!isProcessing) selectQueueItem(idx);
                 });
@@ -470,10 +563,12 @@
 
             fileQueue.forEach(item => {
                 if (item.coverPreviewUrl) URL.revokeObjectURL(item.coverPreviewUrl);
+                if (item.downloadUrl) URL.revokeObjectURL(item.downloadUrl);
             });
 
             statusMsg.innerText = `${files.length}곡의 커버 및 태그 정보를 불러오는 중...`;
             downloadBtn.disabled = true;
+            zipDownloadBtn.style.display = 'none';
 
             fileQueue = [];
             for (const file of files) {
@@ -606,7 +701,15 @@
             return merged.buffer;
         }
 
-        async function processAndDownloadSingleItem(item, repeatCount, index, total) {
+        async function processSingleItem(item, repeatCount, index, total, usedNames) {
+            // 이전 작업 결과가 있다면 정리
+            if (item.downloadUrl) {
+                URL.revokeObjectURL(item.downloadUrl);
+                item.downloadUrl = '';
+            }
+            item.resultBlob = null;
+            item.manuallySaved = false;
+
             let rawBuffer = await item.file.arrayBuffer();
             let baseAudioBuffer;
 
@@ -652,15 +755,28 @@
 
             writer.addTag();
 
-            const downloadUrl = writer.getURL();
-            const a = document.createElement('a');
-            a.href = downloadUrl;
-            a.download = `${cleanTitle || 'music'}.mp3`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            // 중복 파일명 방지 처리
+            const baseFileName = sanitizeFileName(cleanTitle);
+            let finalFileName = `${baseFileName}.mp3`;
+            let counter = 2;
+            while (usedNames.has(finalFileName.toLowerCase())) {
+                finalFileName = `${baseFileName} (${counter}).mp3`;
+                counter++;
+            }
+            usedNames.add(finalFileName.toLowerCase());
 
-            setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
+            const blob = writer.getBlob();
+            const downloadUrl = URL.createObjectURL(blob);
+
+            item.resultBlob = blob;
+            item.downloadUrl = downloadUrl;
+            item.outputFileName = finalFileName;
+
+            // 자동 다운로드 시도
+            triggerBrowserDownload(downloadUrl, finalFileName);
+            if (index === 0) {
+                item.manuallySaved = true;
+            }
         }
 
         downloadBtn.addEventListener('click', async () => {
@@ -670,9 +786,11 @@
             downloadBtn.disabled = true;
             searchBtn.disabled = true;
             fileInput.disabled = true;
+            zipDownloadBtn.style.display = 'none';
 
             const repeatCount = parseInt(repeatCountSelect.value, 10);
             const total = fileQueue.length;
+            const usedNames = new Set();
             let successCount = 0;
 
             for (let i = 0; i < total; i++) {
@@ -681,7 +799,7 @@
                 renderQueueList();
 
                 try {
-                    await processAndDownloadSingleItem(item, repeatCount, i, total);
+                    await processSingleItem(item, repeatCount, i, total, usedNames);
                     item.status = '✅ 완료';
                     successCount++;
                 } catch (err) {
@@ -690,8 +808,9 @@
                 }
                 renderQueueList();
 
+                // 브라우저가 연속 다운로드를 처리할 수 있도록 1.5초 간격 유지
                 if (i < total - 1) {
-                    await sleep(700);
+                    await sleep(1500);
                 }
             }
 
@@ -699,11 +818,40 @@
             downloadBtn.disabled = false;
             searchBtn.disabled = false;
             fileInput.disabled = false;
+            renderQueueList();
 
             if (total === 1 && successCount === 1) {
                 statusMsg.innerText = "🎉 다운로드가 완료되었습니다!";
             } else {
-                statusMsg.innerText = `🎉 일괄 처리 완료! (총 ${total}곡 중 ${successCount}곡 다운로드됨)`;
+                statusMsg.innerText = `🎉 총 ${total}곡 중 ${successCount}곡 작업 완료!\n모바일에서 자동 다운이 막힌 곡은 위 목록의 [📥 저장] 또는 아래 [ZIP 받기]를 눌러주세요.`;
+            }
+        });
+
+        // 전체 완료된 곡을 하나의 ZIP 파일로 묶어서 다운로드
+        zipDownloadBtn.addEventListener('click', async () => {
+            const completedItems = fileQueue.filter(item => item.resultBlob);
+            if (!completedItems.length || isProcessing) return;
+
+            zipDownloadBtn.disabled = true;
+            statusMsg.innerText = `📦 ${completedItems.length}곡을 하나의 ZIP 파일로 묶는 중...`;
+
+            try {
+                const zip = new JSZip();
+                completedItems.forEach(item => {
+                    zip.file(item.outputFileName, item.resultBlob);
+                });
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                const zipUrl = URL.createObjectURL(zipBlob);
+                triggerBrowserDownload(zipUrl, `반복음원_${completedItems.length}곡.zip`);
+
+                statusMsg.innerText = "🎉 ZIP 파일 다운로드가 시작되었습니다! (내 파일 앱에서 압축 풀기)";
+            } catch (err) {
+                console.error(err);
+                alert("ZIP 파일 생성 중 오류가 발생했습니다.");
+                statusMsg.innerText = "ZIP 파일 생성 실패";
+            } finally {
+                zipDownloadBtn.disabled = false;
             }
         });
     </script>
